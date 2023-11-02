@@ -1,5 +1,6 @@
 ﻿using iText.Kernel.Pdf;
 using iText.Kernel.Utils;
+using iText.Layout.Element;
 using PuppeteerSharp;
 using PuppeteerSharp.Media;
 using System.Text;
@@ -56,7 +57,7 @@ class Program
         //// Get all links
         //var links = await page.EvaluateExpressionAsync<string[]>(
         //    @"Array.from(document.querySelectorAll(""[id$='-content-nav'] a"")).map(a => a.href)");
-        allLinks.Insert(0, firstPage);
+        allLinks.Insert(1, firstPage);
 
         var links = allLinks.ToArray();
 
@@ -130,9 +131,19 @@ class Program
 
             await Task.Delay(500);
 
-            // Get article content
-            var content = await page.EvaluateExpressionAsync<string>(
-                "document.querySelector('.markdown-preview-section').outerHTML");
+            try
+            {
+                // Get article content
+                var content = await page.EvaluateExpressionAsync<string>(
+                    "document.querySelector('.markdown-preview-section').outerHTML");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                // Get article content
+                var content = await page.EvaluateExpressionAsync<string>(
+                    "document.body.outerHTML");
+            }
 
             //await page.EvaluateFunctionAsync("content => { document.body.innerHTML = content; }", content);
 
@@ -199,8 +210,18 @@ class Program
         // 查找所有父节点
         var treeItems = await page.QuerySelectorAllAsync(".nav-view-outer .tree-item.is-collapsed");
 
+        // 目录树页
+        var directoryHtml = new StringBuilder("<html><body><ul>");
+
+
         foreach (var item in treeItems)
         {
+            var innerItem = await item.QuerySelectorAsync(".tree-item-inner");
+            // 父节点名称
+            var parentNodeName = await innerItem.EvaluateFunctionAsync<string>("element => element.textContent");
+
+            directoryHtml.Append($"<li style='font-weight:700'>{parentNodeName}</li>");
+
             // 点击父节点以展开子节点
             await item.ClickAsync();
 
@@ -214,6 +235,12 @@ class Program
                 // 获取并存储链接地址
                 var link = await(await childLink.GetPropertyAsync("href")).JsonValueAsync<string>();
                 allLinks.Add(link);
+
+                var linkInnerItem = await childLink.QuerySelectorAsync(".tree-item-inner");
+
+                var nodeName = await linkInnerItem.EvaluateFunctionAsync<string>("element => element.textContent");
+
+                directoryHtml.Append($"<li><a href='{link}'>{nodeName}</a></li>");
             }
 
             // 检查当前节点是否仍然是 .is-collapsed
@@ -225,6 +252,17 @@ class Program
                 allLinks.Add(ownLink);
             }
         }
+
+        directoryHtml.Append("</ul></body></html>");
+
+        // 保存目录页到文件
+        var filePath = "directory.html";
+        await System.IO.File.WriteAllTextAsync(filePath, directoryHtml.ToString());
+
+        Console.WriteLine($"Directory page saved to {filePath}");
+
+        var directoryPage = Path.Combine(Environment.CurrentDirectory, filePath);
+        allLinks.Insert(0, directoryPage);
 
         // 所有链接都已收集到allLinks列表中
         Console.WriteLine("Collected Links:");
