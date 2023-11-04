@@ -27,32 +27,18 @@ class Program
             ExecutablePath = @"C:\Program Files\Google\Chrome\Application\chrome.exe",
             //Args = new string[]
             //{
-            //    "--proxy-server=http://127.0.0.1:7890"  // replace with your proxy server and port
+            //    "--proxy-server=http://127.0.0.1:10809"  // replace with your proxy server and port
             //},
             Headless = true
         });
         var page = await browser.NewPageAsync();
 
-        var firstPage = "https://publish.obsidian.md/help-zh/%E7%94%B1%E6%AD%A4%E5%BC%80%E5%A7%8B";
+        var firstPage = "https://help.obsidian.md/Home";
 
         // Navigate to the initial URL
         await page.GoToAsync(firstPage);
 
         var allLinks = await getAllLinks(page);
-
-        //var elementHandle = await page.QuerySelectorAsync("[id$='-trigger-nav']");
-        //if (elementHandle != null)
-        //{
-        //    var className = await page.EvaluateFunctionAsync<string>("element => element.className", elementHandle);
-        //    Console.WriteLine($"Element found with class name: {className}");
-        //}
-        //else
-        //{
-        //    Console.WriteLine("No element found with a class name ending with '-trigger-nav'");
-        //}
-
-        //// Click the button to reveal the nav tree
-        //await page.ClickAsync("[id$='-trigger-nav']");
 
         //// Get all links
         //var links = await page.EvaluateExpressionAsync<string[]>(
@@ -64,73 +50,73 @@ class Program
         // Loop through each link, navigate to the page, and save the article content to a PDF
         for (int i = 0; i < links.Length; i++)
         {
-            var url = links[i];
-            Console.WriteLine(url.ToString());
-            await page.GoToAsync(url);
-
-            // Get the initial scroll height of the page
-            //var previousScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
-            var totalHeight = 0;
-            var distance = 300;
-            while (true)
+            try
             {
-                // Scroll down by increasing the scrollTop property of the page's body
-                //await page.EvaluateExpressionAsync("window.scrollTo(0, document.body.scrollHeight)");
-                await page.EvaluateExpressionAsync($"window.scrollBy(0, {distance})");
-
-                // Wait for a little bit for new content to load
-                await Task.Delay(500);
-                totalHeight += distance;
-
-                // Check if the scroll height has increased, indicating new content has loaded
-                var newScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
-                Console.WriteLine($"totalHeight: {totalHeight}");
-                Console.WriteLine($"newScrollHeight: {newScrollHeight}");
-                if (newScrollHeight < totalHeight)
+                await scrapyPage(pdfFolderPath, page, links, i);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+                if (i > 0)
                 {
-                    // No new content has loaded, break out of the loop
-                    break;
+                    i--;
                 }
-
-
             }
 
-            // Now all content should be loaded, proceed with other actions...
-            // Set header and footer elements to null
-            //await page.EvaluateFunctionAsync(@"() => {
-            //    var header = document.querySelector('header');
-            //    var aside = document.querySelector('aside');
-            //    var footer = document.querySelector('footer');
-            //    var cconsentBar = document.querySelector('#cconsent-bar');
-            //    var cconsentModal = document.querySelector('#cconsent-modal');
-            //    var feedback = document.querySelector(""[class^='feedback_inlineWrapper']"");
-            //    if (header) {
-            //        header.parentNode.removeChild(header);
-            //    }
-            //    if (aside) {
-            //        aside.parentNode.removeChild(aside);
-            //    }
-            //    if (footer) {
-            //        footer.parentNode.removeChild(footer);
-            //    }
-            //    if (cconsentBar) {
-            //        cconsentBar.parentNode.removeChild(cconsentBar);
-            //    }
-            //    if (cconsentModal) {
-            //        cconsentModal.parentNode.removeChild(cconsentModal);
-            //    }
-            //    if (feedback) {
-            //        feedback.parentNode.removeChild(feedback);
-            //    }
-
-            //}");
+        }
 
 
-            //// Now get the outerHTML of the article element
-            //var articleOuterHtml = await page.EvaluateFunctionAsync<string>("element => element.outerHTML", await page.QuerySelectorAsync("article"));
+        // get pdfFiles
+        var pdfFiles = Directory.GetFiles(pdfFolderPath);
+        var finalFile = Path.Combine(pdfFolderPath, "obsidian.pdf");
+        MergePdfFiles(pdfFiles, finalFile);
 
+        // Close the browser
+        await browser.CloseAsync();
+    }
+
+    private static async Task scrapyPage(string pdfFolderPath, IPage page, string[] links, int i)
+    {
+        var url = links[i];
+        Console.WriteLine(url.ToString());
+        await page.GoToAsync(url);
+
+        // Get the initial scroll height of the page
+        //var previousScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
+        var totalHeight = 0;
+        var distance = 50;
+        while (true)
+        {
+            // Scroll down by increasing the scrollTop property of the page's body
+            //await page.EvaluateExpressionAsync("window.scrollTo(0, document.body.scrollHeight)");
+            await page.EvaluateExpressionAsync($"window.scrollBy(0, {distance})");
+
+            // Wait for a little bit for new content to load
             await Task.Delay(500);
+            totalHeight += distance;
 
+            // Check if the scroll height has increased, indicating new content has loaded
+            var newScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
+            Console.WriteLine($"totalHeight: {totalHeight}");
+            Console.WriteLine($"newScrollHeight: {newScrollHeight}");
+            if (newScrollHeight < totalHeight)
+            {
+                // No new content has loaded, break out of the loop
+                break;
+            }
+
+
+        }
+
+
+
+        //// Now get the outerHTML of the article element
+        //var articleOuterHtml = await page.EvaluateFunctionAsync<string>("element => element.outerHTML", await page.QuerySelectorAsync("article"));
+
+        await Task.Delay(500);
+
+        if (i == 0)
+        {
             try
             {
                 // Get article content
@@ -145,42 +131,47 @@ class Program
                     "document.body.outerHTML");
             }
 
-            //await page.EvaluateFunctionAsync("content => { document.body.innerHTML = content; }", content);
-
-
-
-            // Set up PDF options
-            var pdfOptions = new PdfOptions
+        }
+        else
+        {
+            try
             {
-                Format = PaperFormat.A4,
-                MarginOptions = new MarginOptions
-                {
-                    Top = "2cm",
-                    Right = "1cm",
-                    Bottom = "2cm",
-                    Left = "1cm"
-                },
-                DisplayHeaderFooter = false,
-                PrintBackground = true
-            };
-
-
-
-            // Save PDF to the created folder
-            var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{i}.pdf");
-            // Save content to PDF
-            await page.PdfAsync(pdfFilePath, pdfOptions);
-
+                // Get article content
+                var content = await page.EvaluateExpressionAsync<string>(
+                    "document.querySelector('.markdown-preview-section').outerHTML");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                i--;
+            }
         }
 
 
-        // get pdfFiles
-        var pdfFiles = Directory.GetFiles(pdfFolderPath);
-        var finalFile = Path.Combine(pdfFolderPath, "nextjs-learn.pdf");
-        MergePdfFiles(pdfFiles, finalFile);
+        //await page.EvaluateFunctionAsync("content => { document.body.innerHTML = content; }", content);
 
-        // Close the browser
-        await browser.CloseAsync();
+
+        // Set up PDF options
+        var pdfOptions = new PdfOptions
+        {
+            Format = PaperFormat.A4,
+            MarginOptions = new MarginOptions
+            {
+                Top = "2cm",
+                Right = "1cm",
+                Bottom = "2cm",
+                Left = "1cm"
+            },
+            DisplayHeaderFooter = false,
+            PrintBackground = true
+        };
+
+
+
+        // Save PDF to the created folder
+        var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{i}.pdf");
+        // Save content to PDF
+        await page.PdfAsync(pdfFilePath, pdfOptions);
     }
 
     static void MergePdfFiles(IEnumerable<string> inputPdfFiles, string outputPdfFile)
@@ -233,7 +224,7 @@ class Program
             foreach (var childLink in childLinks)
             {
                 // 获取并存储链接地址
-                var link = await(await childLink.GetPropertyAsync("href")).JsonValueAsync<string>();
+                var link = await (await childLink.GetPropertyAsync("href")).JsonValueAsync<string>();
                 allLinks.Add(link);
 
                 var linkInnerItem = await childLink.QuerySelectorAsync(".tree-item-inner");
@@ -248,7 +239,7 @@ class Program
             if (isCollapsed)
             {
                 // 如果当前节点没有子节点，将其自己的链接添加到列表中
-                var ownLink = await(await item.GetPropertyAsync("href")).JsonValueAsync<string>();
+                var ownLink = await (await item.GetPropertyAsync("href")).JsonValueAsync<string>();
                 allLinks.Add(ownLink);
             }
         }
