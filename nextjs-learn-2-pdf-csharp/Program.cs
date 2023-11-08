@@ -2,6 +2,7 @@
 using iText.Kernel.Utils;
 using PuppeteerSharp;
 using PuppeteerSharp.Media;
+using System.Text.RegularExpressions;
 
 class Program
 {
@@ -9,6 +10,7 @@ class Program
     {
         // Create a folder for saving PDFs
         var pdfFolderPath = Path.Combine(Environment.CurrentDirectory, "PDFs");
+
         if (Directory.Exists(pdfFolderPath))
         {
             // clear the folder
@@ -50,12 +52,14 @@ class Program
 
         // Get all links
         var links = await page.EvaluateExpressionAsync<string[]>(
-            @"Array.from(document.querySelectorAll(""[id$='-content-nav'] a"")).map(a => a.href)");
+            @"Array.from(document.querySelectorAll(""[id$='-content-nav'] a"")).map(a => a.href + '|||' + a.firstElementChild.textContent)");
 
         // Loop through each link, navigate to the page, and save the article content to a PDF
         for (int i = 0; i < links.Length; i++)
         {
-            var url = links[i];
+            var parts = links[i].Split("|||");
+            var url = parts[0];
+            var index = parts[1] == "" ? "0" : parts[1];
             Console.WriteLine(url.ToString());
             await page.GoToAsync(url);
 
@@ -143,7 +147,7 @@ class Program
 
 
             // Save PDF to the created folder
-            var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{i}.pdf");
+            var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{index}.pdf");
             // Save content to PDF
             await page.PdfAsync(pdfFilePath, pdfOptions);
 
@@ -152,11 +156,33 @@ class Program
 
         // get pdfFiles
         var pdfFiles = Directory.GetFiles(pdfFolderPath);
+        var sortedPdfFiles = pdfFiles.OrderBy(f => GetFileNumber(f)).ToList();
         var finalFile = Path.Combine(pdfFolderPath, "nextjs-learn.pdf");
-        MergePdfFiles(pdfFiles, finalFile);
+        MergePdfFiles(sortedPdfFiles, finalFile);
 
         // Close the browser
         await browser.CloseAsync();
+    }
+
+    static void saveAll(string pdfFolderPath)
+    {
+        // get pdfFiles
+        var pdfFiles = Directory.GetFiles(pdfFolderPath);
+        var sortedPdfFiles = pdfFiles.OrderBy(f => GetFileNumber(f)).ToList();
+        // 打印排序后的文件名
+        sortedPdfFiles.ForEach(f => Console.WriteLine(f));
+        var finalFile = Path.Combine(pdfFolderPath, "nextjs-learn.pdf");
+        MergePdfFiles(sortedPdfFiles, finalFile);
+    }
+
+    // 提取文件名中的数字并转换为整数
+    static int GetFileNumber(string fileName)
+    {
+        // 正则表达式匹配所有数字
+        var match = Regex.Match(Path.GetFileName(fileName), @"\d+");
+        var num = match.Success ? int.Parse(match.Value) : 0;
+        Console.WriteLine(num);
+        return num;
     }
 
     static void MergePdfFiles(IEnumerable<string> inputPdfFiles, string outputPdfFile)
