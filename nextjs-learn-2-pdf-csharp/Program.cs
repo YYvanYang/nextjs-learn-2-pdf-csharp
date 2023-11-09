@@ -372,10 +372,10 @@ class Program
         var browser = await Puppeteer.LaunchAsync(new LaunchOptions { ExecutablePath = @"C:\Program Files\Google\Chrome\Application\chrome.exe", Headless = true });
         var page = await browser.NewPageAsync();
 
+        await page.SetContentAsync("<html><body></body></html>"); // Set an initial empty HTML content
 
         foreach (var pageContent in pagesContentList)
         {
-            await page.SetContentAsync("<html><body></body></html>"); // Set an initial empty HTML content
             // For each content, create a new section in the HTML
             string sectionHtml = $"<section><h1>{pageContent.Title}</h1><div>{pageContent.Content}</div></section>";
             await page.EvaluateFunctionAsync(@"(html) => {
