@@ -2,11 +2,291 @@
 using iText.Kernel.Utils;
 using PuppeteerSharp;
 using PuppeteerSharp.Media;
+using System.Linq;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Text.Json;
+using System;
 
 class Program
 {
     public static async Task Main(string[] args)
+    {
+        string pdfFolderPath = PrepareDirectory();
+
+        List<NavLink> navLinks = await GetNavLinks();
+        var activeLinkSiblings = await GetActiveLinkSiblings(navLinks);
+        // Now you have activeLinkSiblings for further processing
+
+        return;
+
+        //if (sideNavSections != null)
+        //{
+        //    var className = await page.EvaluateFunctionAsync<string>("element => element.className", elementHandle);
+        //    Console.WriteLine($"Element found with class name: {className}");
+        //}
+        //else
+        //{
+        //    Console.WriteLine("No element found with a class name ending with '-trigger-nav'");
+        //}
+
+        // Click the button to reveal the nav tree
+        //await page.ClickAsync("[id$='-trigger-nav']");
+
+        //// Get all links
+        //var links = await page.EvaluateExpressionAsync<string[]>(
+        //    @"Array.from(document.querySelectorAll(""[id$='-content-nav'] a"")).map(a => a.href + '|||' + a.firstElementChild.textContent)");
+
+        //// Loop through each link, navigate to the page, and save the article content to a PDF
+        //for (int i = 0; i < links.Length; i++)
+        //{
+        //    var parts = links[i].Split("|||");
+        //    var url = parts[0];
+        //    var index = parts[1] == "" ? "0" : parts[1];
+        //    Console.WriteLine(url.ToString());
+        //    await page.GoToAsync(url);
+
+        //    // Get the initial scroll height of the page
+        //    var previousScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
+        //    var totalHeight = 0;
+        //    var distance = 300;
+        //    while (true)
+        //    {
+        //        // Scroll down by increasing the scrollTop property of the page's body
+        //        //await page.EvaluateExpressionAsync("window.scrollTo(0, document.body.scrollHeight)");
+        //        await page.EvaluateExpressionAsync($"window.scrollBy(0, {distance})");
+
+        //        // Wait for a little bit for new content to load
+        //        await Task.Delay(500);
+        //        totalHeight += distance;
+
+        //        // Check if the scroll height has increased, indicating new content has loaded
+        //        var newScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
+        //        Console.WriteLine($"totalHeight: {totalHeight}");
+        //        Console.WriteLine($"newScrollHeight: {newScrollHeight}");
+        //        if (newScrollHeight < totalHeight)
+        //        {
+        //            // No new content has loaded, break out of the loop
+        //            break;
+        //        }
+
+
+        //    }
+
+        //    // Now all content should be loaded, proceed with other actions...
+        //    // Set header and footer elements to null
+        //    await page.EvaluateFunctionAsync(@"() => {
+        //        var header = document.querySelector('header');
+        //        var aside = document.querySelector('aside');
+        //        var footer = document.querySelector('footer');
+        //        var cconsentBar = document.querySelector('#cconsent-bar');
+        //        var cconsentModal = document.querySelector('#cconsent-modal');
+        //        var feedback = document.querySelector(""[class^='feedback_inlineWrapper']"");
+        //        if (header) {
+        //            header.parentNode.removeChild(header);
+        //        }
+        //        if (aside) {
+        //            aside.parentNode.removeChild(aside);
+        //        }
+        //        if (footer) {
+        //            footer.parentNode.removeChild(footer);
+        //        }
+        //        if (cconsentBar) {
+        //            cconsentBar.parentNode.removeChild(cconsentBar);
+        //        }
+        //        if (cconsentModal) {
+        //            cconsentModal.parentNode.removeChild(cconsentModal);
+        //        }
+        //        if (feedback) {
+        //            feedback.parentNode.removeChild(feedback);
+        //        }
+
+        //    }");
+
+
+        //    //// Now get the outerHTML of the article element
+        //    //var articleOuterHtml = await page.EvaluateFunctionAsync<string>("element => element.outerHTML", await page.QuerySelectorAsync("article"));
+
+        //    // Get article content
+        //    var content = await page.EvaluateExpressionAsync<string>(
+        //        "document.querySelector('article').outerHTML");
+
+
+        //    // Set up PDF options
+        //    var pdfOptions = new PdfOptions
+        //    {
+        //        Format = PaperFormat.A4,
+        //        MarginOptions = new MarginOptions
+        //        {
+        //            Top = "2cm",
+        //            Right = "1cm",
+        //            Bottom = "2cm",
+        //            Left = "1cm"
+        //        },
+        //        DisplayHeaderFooter = false,
+        //        PrintBackground = true
+        //    };
+
+
+
+        //    // Save PDF to the created folder
+        //    var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{index}.pdf");
+        //    // Save content to PDF
+        //    await page.PdfAsync(pdfFilePath, pdfOptions);
+
+        //}
+
+
+        //// get pdfFiles
+        //var pdfFiles = Directory.GetFiles(pdfFolderPath);
+        //var sortedPdfFiles = pdfFiles.OrderBy(f => GetFileNumber(f)).ToList();
+        //var finalFile = Path.Combine(pdfFolderPath, "nextjs-learn.pdf");
+        //MergePdfFiles(sortedPdfFiles, finalFile);
+
+        //// Close the browser
+        //await browser.CloseAsync();
+    }
+
+    public struct NavLink
+    {
+        public string Title;
+        public List<(string Text, string Url)> Links;
+    }
+
+    public struct ActiveLinkSiblings
+    {
+        public string ActiveTitle;
+        public List<(string Text, string Url)> SiblingLinks;
+    }
+
+    public static async Task<List<NavLink>> GetNavLinks()
+    {
+        // Launch browser
+        var browser = await Puppeteer.LaunchAsync(new LaunchOptions
+        {
+            ExecutablePath = @"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            Headless = true
+        });
+        var page = await browser.NewPageAsync();
+
+        await page.GoToAsync("https://platform.openai.com/docs/overview");
+
+        var sideNavSections = await page.QuerySelectorAllAsync(".docs-nav .side-nav .side-nav-section");
+        var navLinks = new List<NavLink>();
+
+        foreach (var section in sideNavSections)
+        {
+            var header = await section.QuerySelectorAsync(".side-nav-header.subheading");
+            var title = await (await header.GetPropertyAsync("textContent")).JsonValueAsync<string>();
+
+            var links = await section.QuerySelectorAllAsync("a");
+            var linkData = new List<(string Text, string Url)>();
+
+            foreach (var link in links)
+            {
+                var text = await (await link.GetPropertyAsync("textContent")).JsonValueAsync<string>();
+                var url = await (await link.GetPropertyAsync("href")).JsonValueAsync<string>();
+                linkData.Add((text, url));
+            }
+
+            navLinks.Add(new NavLink
+            {
+                Title = title,
+                Links = linkData
+            });
+        }
+
+        await browser.CloseAsync();
+
+        foreach (var navLink in navLinks)
+        {
+            Console.WriteLine(navLink.Title);
+            foreach (var (Text, Url) in navLink.Links)
+            {
+                Console.WriteLine($"{Text} - {Url}");
+            }
+        }
+
+        return navLinks;
+    }
+
+    public static async Task<List<ActiveLinkSiblings>> GetActiveLinkSiblings(List<NavLink> navLinks)
+    {
+        var browser = await Puppeteer.LaunchAsync(new LaunchOptions
+        {
+            ExecutablePath = @"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            Headless = true
+        });
+        var activeLinkSiblingsList = new List<ActiveLinkSiblings>();
+
+        foreach (var navLink in navLinks)
+        {
+            foreach (var (Text, Url) in navLink.Links)
+            {
+                var page = await browser.NewPageAsync();
+                await page.GoToAsync(Url);
+
+                var activeLink = await page.QuerySelectorAsync(".scroll-link.side-nav-item.active.active-exact");
+                if (activeLink != null)
+                {
+                    var activeTitle = await (await activeLink.GetPropertyAsync("textContent")).JsonValueAsync<string>();
+                    var siblingLinksElements = await activeLink.EvaluateFunctionAsync<JsonElement[]>(@"(activeLink) => {
+                        const siblings = [];
+                        let sibling = activeLink.nextElementSibling;
+                        while (sibling) {
+                            if (sibling.matches('.scroll-link.side-nav-item.side-nav-child')) {
+                                siblings.push({ text: sibling.textContent, url: sibling.getAttribute('href') });
+                            }
+                            sibling = sibling.nextElementSibling;
+                        }
+                        return siblings;
+                    }", activeLink);
+
+                    if (siblingLinksElements != null && siblingLinksElements.Length > 0)
+                    {
+                        var siblingLinksList = siblingLinksElements.Select(element =>
+                        {
+                            // Check if the JsonElement contains the property and it's a string.
+                            var propertyText = element.TryGetProperty("text", out var textElement) && textElement.ValueKind == JsonValueKind.String
+                                ? textElement.GetString() ?? string.Empty
+                                : string.Empty;
+
+                            var propertyUrl = element.TryGetProperty("url", out var urlElement) && urlElement.ValueKind == JsonValueKind.String
+                                ? urlElement.GetString() ?? string.Empty
+                                : string.Empty;
+
+                            return (propertyText, propertyUrl);
+                        }).ToList();
+
+                        activeLinkSiblingsList.Add(new ActiveLinkSiblings
+                        {
+                            ActiveTitle = activeTitle,
+                            SiblingLinks = siblingLinksList
+                        });
+
+                    }
+
+                }
+
+                await page.CloseAsync();
+            }
+        }
+
+        await browser.CloseAsync();
+
+        foreach (var navLink in activeLinkSiblingsList)
+        {
+            Console.WriteLine(navLink.ActiveTitle);
+            foreach (var (Text, Url) in navLink.SiblingLinks)
+            {
+                Console.WriteLine($"{Text} - {Url}");
+            }
+        }
+
+        return activeLinkSiblingsList;
+    }
+
+    private static string PrepareDirectory()
     {
         // Create a folder for saving PDFs
         var pdfFolderPath = Path.Combine(Environment.CurrentDirectory, "PDFs");
@@ -21,147 +301,8 @@ class Program
         {
             Directory.CreateDirectory(pdfFolderPath);
         }
-        // Launch browser
-        var browser = await Puppeteer.LaunchAsync(new LaunchOptions
-        {
-            ExecutablePath = @"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            //Args = new string[]
-            //{
-            //    "--proxy-server=http://127.0.0.1:7890"  // replace with your proxy server and port
-            //},
-            Headless = true
-        });
-        var page = await browser.NewPageAsync();
 
-        // Navigate to the initial URL
-        await page.GoToAsync("https://nextjs.org/learn/dashboard-app");
-
-        var elementHandle = await page.QuerySelectorAsync("[id$='-trigger-nav']");
-        if (elementHandle != null)
-        {
-            var className = await page.EvaluateFunctionAsync<string>("element => element.className", elementHandle);
-            Console.WriteLine($"Element found with class name: {className}");
-        }
-        else
-        {
-            Console.WriteLine("No element found with a class name ending with '-trigger-nav'");
-        }
-
-        // Click the button to reveal the nav tree
-        await page.ClickAsync("[id$='-trigger-nav']");
-
-        // Get all links
-        var links = await page.EvaluateExpressionAsync<string[]>(
-            @"Array.from(document.querySelectorAll(""[id$='-content-nav'] a"")).map(a => a.href + '|||' + a.firstElementChild.textContent)");
-
-        // Loop through each link, navigate to the page, and save the article content to a PDF
-        for (int i = 0; i < links.Length; i++)
-        {
-            var parts = links[i].Split("|||");
-            var url = parts[0];
-            var index = parts[1] == "" ? "0" : parts[1];
-            Console.WriteLine(url.ToString());
-            await page.GoToAsync(url);
-
-            // Get the initial scroll height of the page
-            var previousScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
-            var totalHeight = 0;
-            var distance = 300;
-            while (true)
-            {
-                // Scroll down by increasing the scrollTop property of the page's body
-                //await page.EvaluateExpressionAsync("window.scrollTo(0, document.body.scrollHeight)");
-                await page.EvaluateExpressionAsync($"window.scrollBy(0, {distance})");
-
-                // Wait for a little bit for new content to load
-                await Task.Delay(500);
-                totalHeight += distance;
-
-                // Check if the scroll height has increased, indicating new content has loaded
-                var newScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
-                Console.WriteLine($"totalHeight: {totalHeight}");
-                Console.WriteLine($"newScrollHeight: {newScrollHeight}");
-                if (newScrollHeight < totalHeight)
-                {
-                    // No new content has loaded, break out of the loop
-                    break;
-                }
-
-
-            }
-
-            // Now all content should be loaded, proceed with other actions...
-            // Set header and footer elements to null
-            await page.EvaluateFunctionAsync(@"() => {
-                var header = document.querySelector('header');
-                var aside = document.querySelector('aside');
-                var footer = document.querySelector('footer');
-                var cconsentBar = document.querySelector('#cconsent-bar');
-                var cconsentModal = document.querySelector('#cconsent-modal');
-                var feedback = document.querySelector(""[class^='feedback_inlineWrapper']"");
-                if (header) {
-                    header.parentNode.removeChild(header);
-                }
-                if (aside) {
-                    aside.parentNode.removeChild(aside);
-                }
-                if (footer) {
-                    footer.parentNode.removeChild(footer);
-                }
-                if (cconsentBar) {
-                    cconsentBar.parentNode.removeChild(cconsentBar);
-                }
-                if (cconsentModal) {
-                    cconsentModal.parentNode.removeChild(cconsentModal);
-                }
-                if (feedback) {
-                    feedback.parentNode.removeChild(feedback);
-                }
-
-            }");
-
-
-            //// Now get the outerHTML of the article element
-            //var articleOuterHtml = await page.EvaluateFunctionAsync<string>("element => element.outerHTML", await page.QuerySelectorAsync("article"));
-
-            // Get article content
-            var content = await page.EvaluateExpressionAsync<string>(
-                "document.querySelector('article').outerHTML");
-
-
-            // Set up PDF options
-            var pdfOptions = new PdfOptions
-            {
-                Format = PaperFormat.A4,
-                MarginOptions = new MarginOptions
-                {
-                    Top = "2cm",
-                    Right = "1cm",
-                    Bottom = "2cm",
-                    Left = "1cm"
-                },
-                DisplayHeaderFooter = false,
-                PrintBackground = true
-            };
-
-
-
-            // Save PDF to the created folder
-            var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{index}.pdf");
-            // Save content to PDF
-            await page.PdfAsync(pdfFilePath, pdfOptions);
-
-        }
-
-
-        // get pdfFiles
-        var pdfFiles = Directory.GetFiles(pdfFolderPath);
-        var sortedPdfFiles = pdfFiles.OrderBy(f => GetFileNumber(f)).ToList();
-        var finalFile = Path.Combine(pdfFolderPath, "nextjs-learn.pdf");
-        MergePdfFiles(sortedPdfFiles, finalFile);
-
-        // Close the browser
-        await browser.CloseAsync();
+        return pdfFolderPath;
     }
 
     static void saveAll(string pdfFolderPath)
