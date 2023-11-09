@@ -159,6 +159,12 @@ class Program
         public List<(string Text, string Url)> SiblingLinks;
     }
 
+    public struct Link
+    {
+        public string Text;
+        public string Url;
+    }
+
     public static async Task<List<NavLink>> GetNavLinks()
     {
         // Launch browser
@@ -230,12 +236,12 @@ class Program
                 if (activeLink != null)
                 {
                     var activeTitle = await (await activeLink.GetPropertyAsync("textContent")).JsonValueAsync<string>();
-                    var siblingLinksElements = await activeLink.EvaluateFunctionAsync<JsonElement[]>(@"(activeLink) => {
+                    var siblingLinksElements = await activeLink.EvaluateFunctionAsync<string[]>(@"(activeLink) => {
                         const siblings = [];
                         let sibling = activeLink.nextElementSibling;
                         while (sibling) {
                             if (sibling.matches('.scroll-link.side-nav-item.side-nav-child')) {
-                                siblings.push({ text: sibling.textContent, url: sibling.getAttribute('href') });
+                                siblings.push(sibling.textContent+'|||'+sibling.getAttribute('href'));
                             }
                             sibling = sibling.nextElementSibling;
                         }
@@ -244,25 +250,16 @@ class Program
 
                     if (siblingLinksElements != null && siblingLinksElements.Length > 0)
                     {
-                        var siblingLinksList = siblingLinksElements.Select(element =>
+                        foreach (var link in siblingLinksElements)
                         {
-                            // Check if the JsonElement contains the property and it's a string.
-                            var propertyText = element.TryGetProperty("text", out var textElement) && textElement.ValueKind == JsonValueKind.String
-                                ? textElement.GetString() ?? string.Empty
-                                : string.Empty;
+                            Console.WriteLine(link);
+                        }
 
-                            var propertyUrl = element.TryGetProperty("url", out var urlElement) && urlElement.ValueKind == JsonValueKind.String
-                                ? urlElement.GetString() ?? string.Empty
-                                : string.Empty;
-
-                            return (propertyText, propertyUrl);
-                        }).ToList();
-
-                        activeLinkSiblingsList.Add(new ActiveLinkSiblings
-                        {
-                            ActiveTitle = activeTitle,
-                            SiblingLinks = siblingLinksList
-                        });
+                        //activeLinkSiblingsList.Add(new ActiveLinkSiblings
+                        //{
+                        //    ActiveTitle = activeTitle,
+                        //    SiblingLinks = siblingLinksList
+                        //});
 
                     }
 
