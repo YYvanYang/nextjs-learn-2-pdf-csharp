@@ -345,20 +345,27 @@ class Program
             {
                 var page = await browser.NewPageAsync();
                 await page.GoToAsync(Url);
-                Console.WriteLine($"fetching page: {Url}");
-                await LoadAllPageContent(page);
 
-                var contentElement = await page.QuerySelectorAsync(".docs-body");
-                var content = "";
-                if (contentElement != null)
+                try
                 {
-                    content = await (await contentElement.GetPropertyAsync("innerText")).JsonValueAsync<string>();
+                    Console.WriteLine($"fetching page: {Url}");
+                    await LoadAllPageContent(page);
+
+                    var content = await page.EvaluateExpressionAsync<string>(
+                            "document.querySelector('.docs-body').outerHTML");
+
+                    pagesContentList.Add(new PageContent
+                    {
+                        Title = Text,
+                        Content = content
+                    });
+
                 }
-                pagesContentList.Add(new PageContent
+                catch (Exception ex)
                 {
-                    Title = Text,
-                    Content = content
-                });
+                    Console.WriteLine(ex.ToString());
+                }
+
                 await page.CloseAsync();
             }
         }
