@@ -16,7 +16,10 @@ class Program
 
         List<NavLink> navLinks = await GetNavLinks();
         var activeLinkSiblings = await GetActiveLinkSiblings(navLinks);
-        // Now you have activeLinkSiblings for further processing
+        var pagesContentList = await GetPagesContent(activeLinkSiblings);
+        // Define the path where you want to save the PDF
+        string pdfPath = Path.Combine(pdfFolderPath, "openai-document.pdf");
+        await SaveContentToPDF(pagesContentList, pdfPath);
 
         return;
 
@@ -159,10 +162,46 @@ class Program
         public List<(string Text, string Url)> SiblingLinks;
     }
 
+    public struct PageContent
+    {
+        public string Title;
+        public string Content;
+    }
+
     public struct Link
     {
         public string Text;
         public string Url;
+    }
+
+    public static async Task LoadAllPageContent(IPage page)
+    {
+        // Get the initial scroll height of the page
+        var previousScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
+        var totalHeight = 0;
+        var distance = 300;
+        while (true)
+        {
+            // Scroll down by increasing the scrollTop property of the page's body
+            //await page.EvaluateExpressionAsync("window.scrollTo(0, document.body.scrollHeight)");
+            await page.EvaluateExpressionAsync($"window.scrollBy(0, {distance})");
+
+            // Wait for a little bit for new content to load
+            await Task.Delay(500);
+            totalHeight += distance;
+
+            // Check if the scroll height has increased, indicating new content has loaded
+            var newScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
+            Console.WriteLine($"totalHeight: {totalHeight}");
+            Console.WriteLine($"newScrollHeight: {newScrollHeight}");
+            if (newScrollHeight < totalHeight)
+            {
+                // No new content has loaded, break out of the loop
+                break;
+            }
+
+
+        }
     }
 
     public static async Task<List<NavLink>> GetNavLinks()
@@ -289,6 +328,75 @@ class Program
         }
 
         return activeLinkSiblingsList;
+    }
+
+    public static async Task<List<PageContent>> GetPagesContent(List<ActiveLinkSiblings> activeLinkSiblingsList)
+    {
+        var browser = await Puppeteer.LaunchAsync(new LaunchOptions
+        {
+            ExecutablePath = @"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            Headless = true
+        });
+        var pagesContentList = new List<PageContent>();
+
+        foreach (var activeLinkSiblings in activeLinkSiblingsList)
+        {
+            foreach (var (Text, Url) in activeLinkSiblings.SiblingLinks)
+            {
+                var page = await browser.NewPageAsync();
+                await page.GoToAsync(Url);
+                Console.WriteLine($"fetching page: {Url}");
+                await LoadAllPageContent(page);
+
+                var contentElement = await page.QuerySelectorAsync(".docs-body");
+                var content = "";
+                if (contentElement != null)
+                {
+                    content = await (await contentElement.GetPropertyAsync("innerText")).JsonValueAsync<string>();
+                }
+                pagesContentList.Add(new PageContent
+                {
+                    Title = Text,
+                    Content = content
+                });
+                await page.CloseAsync();
+            }
+        }
+
+        await browser.CloseAsync();
+        return pagesContentList;
+    }
+
+    public static async Task SaveContentToPDF(List<PageContent> pagesContentList, string filePath)
+    {
+        var browser = await Puppeteer.LaunchAsync(new LaunchOptions { ExecutablePath = @"C:\Program Files\Google\Chrome\Application\chrome.exe", Headless = true });
+        var page = await browser.NewPageAsync();
+
+
+        foreach (var pageContent in pagesContentList)
+        {
+            await page.SetContentAsync("<html><body></body></html>"); // Set an initial empty HTML content
+            // For each content, create a new section in the HTML
+            string sectionHtml = $"<section><h1>{pageContent.Title}</h1><div>{pageContent.Content}</div></section>";
+            await page.EvaluateFunctionAsync(@"(html) => {
+            document.body.insertAdjacentHTML('beforeend', html);
+        }", sectionHtml);
+
+        }
+
+        // Adjust PDF options as necessary
+        var pdfOptions = new PdfOptions
+        {
+            Format = PaperFormat.A4,
+            PrintBackground = true,
+            MarginOptions = { Top = "20px", Right = "20px", Bottom = "20px", Left = "20px" }
+        };
+
+
+        Console.WriteLine($"Saving PDF Document, path: {filePath}");
+        await page.PdfAsync(filePath, pdfOptions);
+
+        await browser.CloseAsync();
     }
 
     private static string PrepareDirectory()
