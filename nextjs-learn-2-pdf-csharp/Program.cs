@@ -236,32 +236,37 @@ class Program
                 if (activeLink != null)
                 {
                     var activeTitle = await (await activeLink.GetPropertyAsync("textContent")).JsonValueAsync<string>();
-                    var siblingLinksElements = await activeLink.EvaluateFunctionAsync<string[]>(@"(activeLink) => {
+                    var activeLinkHref = await (await activeLink.GetPropertyAsync("href")).JsonValueAsync<string>();
+                    // here must declar Link[] type, else it will convert fail
+                    var siblingLinksElements = await activeLink.EvaluateFunctionAsync<Link[]>(@"(activeLink) => {
                         const siblings = [];
                         let sibling = activeLink.nextElementSibling;
                         while (sibling) {
                             if (sibling.matches('.scroll-link.side-nav-item.side-nav-child')) {
-                                siblings.push(sibling.textContent+'|||'+sibling.getAttribute('href'));
+                                let obj = { Text: sibling.textContent, Url: sibling.href };
+                                siblings.push(obj);
                             }
                             sibling = sibling.nextElementSibling;
                         }
                         return siblings;
                     }", activeLink);
 
+
                     if (siblingLinksElements != null && siblingLinksElements.Length > 0)
                     {
-                        foreach (var link in siblingLinksElements)
-                        {
-                            Console.WriteLine(link);
-                        }
 
-                        //activeLinkSiblingsList.Add(new ActiveLinkSiblings
-                        //{
-                        //    ActiveTitle = activeTitle,
-                        //    SiblingLinks = siblingLinksList
-                        //});
+                        var siblingLinks = siblingLinksElements.Select(link => (link.Text, link.Url)).ToList();
+                        // add active link to the first position
+                        siblingLinks.Insert(0, (activeTitle, activeLinkHref));
+                        activeLinkSiblingsList.Add(new ActiveLinkSiblings
+                        {
+                            ActiveTitle = activeTitle,
+                            SiblingLinks = siblingLinks
+                        });
 
                     }
+
+
 
                 }
 
@@ -278,6 +283,9 @@ class Program
             {
                 Console.WriteLine($"{Text} - {Url}");
             }
+            Console.WriteLine();
+            Console.WriteLine("===================");
+            Console.WriteLine();
         }
 
         return activeLinkSiblingsList;
