@@ -16,10 +16,10 @@ class Program
 
         List<NavLink> navLinks = await GetNavLinks();
         var activeLinkSiblings = await GetActiveLinkSiblings(navLinks);
-        var pagesContentList = await GetPagesContent(activeLinkSiblings);
+        var pagesContentList = await GetPagesContent(activeLinkSiblings, pdfFolderPath);
         // Define the path where you want to save the PDF
-        string pdfPath = Path.Combine(pdfFolderPath, "openai-document.pdf");
-        await SaveContentToPDF(pagesContentList, pdfPath);
+        //string pdfPath = Path.Combine(pdfFolderPath, "openai-document.pdf");
+        //await SaveContentToPDF(pagesContentList, pdfPath);
 
         return;
 
@@ -330,7 +330,7 @@ class Program
         return activeLinkSiblingsList;
     }
 
-    public static async Task<List<PageContent>> GetPagesContent(List<ActiveLinkSiblings> activeLinkSiblingsList)
+    public static async Task<List<PageContent>> GetPagesContent(List<ActiveLinkSiblings> activeLinkSiblingsList, string pdfFolderPath)
     {
         var browser = await Puppeteer.LaunchAsync(new LaunchOptions
         {
@@ -338,7 +338,7 @@ class Program
             Headless = true
         });
         var pagesContentList = new List<PageContent>();
-
+        var index = 0;
         foreach (var activeLinkSiblings in activeLinkSiblingsList)
         {
             foreach (var (Text, Url) in activeLinkSiblings.SiblingLinks)
@@ -360,6 +360,8 @@ class Program
                         Content = content
                     });
 
+                    await SavePage(page, index, pdfFolderPath);
+                    index++;
                 }
                 catch (Exception ex)
                 {
@@ -372,6 +374,35 @@ class Program
 
         await browser.CloseAsync();
         return pagesContentList;
+    }
+
+    public static async Task SavePage(IPage page, int index, string pdfFolderPath)
+    {
+        // Set up PDF options
+        var pdfOptions = new PdfOptions
+        {
+            Format = PaperFormat.A4,
+            MarginOptions = new MarginOptions
+            {
+                Top = "2cm",
+                Right = "1cm",
+                Bottom = "2cm",
+                Left = "1cm"
+            },
+            DisplayHeaderFooter = false,
+            PrintBackground = true
+        };
+
+        // Save PDF to the created folder
+        var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{index}.pdf");
+        // Save content to PDF
+        await page.PdfAsync(pdfFilePath, pdfOptions);
+
+        // get pdfFiles
+        var pdfFiles = Directory.GetFiles(pdfFolderPath);
+        var sortedPdfFiles = pdfFiles.OrderBy(f => GetFileNumber(f)).ToList();
+        var finalFile = Path.Combine(pdfFolderPath, "openai-docs.pdf");
+        MergePdfFiles(sortedPdfFiles, finalFile);
     }
 
     public static async Task SaveContentToPDF(List<PageContent> pagesContentList, string filePath)
