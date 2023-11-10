@@ -200,7 +200,7 @@ class Program
         return activeLinkSiblingsList;
     }
 
-    static async Task HiddenHeaderAndFooter(IPage page)
+    static async Task HideHeaderAndFooter(IPage page)
     {
         // Set header and footer elements to null
         await page.EvaluateFunctionAsync(@"() => {
@@ -272,7 +272,10 @@ class Program
                 try
                 {
                     Console.WriteLine($"fetching page: {Url}");
+
                     await LoadAllPageContent(page);
+
+                    await HideHeaderAndFooter(page);
 
                     var content = await page.EvaluateExpressionAsync<string>(
                             "document.querySelector('.docs-body').outerHTML");
