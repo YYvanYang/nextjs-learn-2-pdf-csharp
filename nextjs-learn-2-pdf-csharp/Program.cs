@@ -16,138 +16,8 @@ class Program
 
         List<NavLink> navLinks = await GetNavLinks();
         var activeLinkSiblings = await GetActiveLinkSiblings(navLinks);
-        var pagesContentList = await GetPagesContent(activeLinkSiblings, pdfFolderPath);
-        // Define the path where you want to save the PDF
-        //string pdfPath = Path.Combine(pdfFolderPath, "openai-document.pdf");
-        //await SaveContentToPDF(pagesContentList, pdfPath);
-
-        return;
-
-        //if (sideNavSections != null)
-        //{
-        //    var className = await page.EvaluateFunctionAsync<string>("element => element.className", elementHandle);
-        //    Console.WriteLine($"Element found with class name: {className}");
-        //}
-        //else
-        //{
-        //    Console.WriteLine("No element found with a class name ending with '-trigger-nav'");
-        //}
-
-        // Click the button to reveal the nav tree
-        //await page.ClickAsync("[id$='-trigger-nav']");
-
-        //// Get all links
-        //var links = await page.EvaluateExpressionAsync<string[]>(
-        //    @"Array.from(document.querySelectorAll(""[id$='-content-nav'] a"")).map(a => a.href + '|||' + a.firstElementChild.textContent)");
-
-        //// Loop through each link, navigate to the page, and save the article content to a PDF
-        //for (int i = 0; i < links.Length; i++)
-        //{
-        //    var parts = links[i].Split("|||");
-        //    var url = parts[0];
-        //    var index = parts[1] == "" ? "0" : parts[1];
-        //    Console.WriteLine(url.ToString());
-        //    await page.GoToAsync(url);
-
-        //    // Get the initial scroll height of the page
-        //    var previousScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
-        //    var totalHeight = 0;
-        //    var distance = 300;
-        //    while (true)
-        //    {
-        //        // Scroll down by increasing the scrollTop property of the page's body
-        //        //await page.EvaluateExpressionAsync("window.scrollTo(0, document.body.scrollHeight)");
-        //        await page.EvaluateExpressionAsync($"window.scrollBy(0, {distance})");
-
-        //        // Wait for a little bit for new content to load
-        //        await Task.Delay(500);
-        //        totalHeight += distance;
-
-        //        // Check if the scroll height has increased, indicating new content has loaded
-        //        var newScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
-        //        Console.WriteLine($"totalHeight: {totalHeight}");
-        //        Console.WriteLine($"newScrollHeight: {newScrollHeight}");
-        //        if (newScrollHeight < totalHeight)
-        //        {
-        //            // No new content has loaded, break out of the loop
-        //            break;
-        //        }
-
-
-        //    }
-
-        //    // Now all content should be loaded, proceed with other actions...
-        //    // Set header and footer elements to null
-        //    await page.EvaluateFunctionAsync(@"() => {
-        //        var header = document.querySelector('header');
-        //        var aside = document.querySelector('aside');
-        //        var footer = document.querySelector('footer');
-        //        var cconsentBar = document.querySelector('#cconsent-bar');
-        //        var cconsentModal = document.querySelector('#cconsent-modal');
-        //        var feedback = document.querySelector(""[class^='feedback_inlineWrapper']"");
-        //        if (header) {
-        //            header.parentNode.removeChild(header);
-        //        }
-        //        if (aside) {
-        //            aside.parentNode.removeChild(aside);
-        //        }
-        //        if (footer) {
-        //            footer.parentNode.removeChild(footer);
-        //        }
-        //        if (cconsentBar) {
-        //            cconsentBar.parentNode.removeChild(cconsentBar);
-        //        }
-        //        if (cconsentModal) {
-        //            cconsentModal.parentNode.removeChild(cconsentModal);
-        //        }
-        //        if (feedback) {
-        //            feedback.parentNode.removeChild(feedback);
-        //        }
-
-        //    }");
-
-
-        //    //// Now get the outerHTML of the article element
-        //    //var articleOuterHtml = await page.EvaluateFunctionAsync<string>("element => element.outerHTML", await page.QuerySelectorAsync("article"));
-
-        //    // Get article content
-        //    var content = await page.EvaluateExpressionAsync<string>(
-        //        "document.querySelector('article').outerHTML");
-
-
-        //    // Set up PDF options
-        //    var pdfOptions = new PdfOptions
-        //    {
-        //        Format = PaperFormat.A4,
-        //        MarginOptions = new MarginOptions
-        //        {
-        //            Top = "2cm",
-        //            Right = "1cm",
-        //            Bottom = "2cm",
-        //            Left = "1cm"
-        //        },
-        //        DisplayHeaderFooter = false,
-        //        PrintBackground = true
-        //    };
-
-
-
-        //    // Save PDF to the created folder
-        //    var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{index}.pdf");
-        //    // Save content to PDF
-        //    await page.PdfAsync(pdfFilePath, pdfOptions);
-
-        //}
-
-
-        //// get pdfFiles
-        //var pdfFiles = Directory.GetFiles(pdfFolderPath);
-        //var sortedPdfFiles = pdfFiles.OrderBy(f => GetFileNumber(f)).ToList();
-        //var finalFile = Path.Combine(pdfFolderPath, "nextjs-learn.pdf");
-        //MergePdfFiles(sortedPdfFiles, finalFile);
-
-        //// Close the browser
-        //await browser.CloseAsync();
+        await SavePagesContent(activeLinkSiblings, pdfFolderPath);
+        SaveAllToPdf(pdfFolderPath);
     }
 
     public struct NavLink
@@ -330,14 +200,67 @@ class Program
         return activeLinkSiblingsList;
     }
 
-    public static async Task<List<PageContent>> GetPagesContent(List<ActiveLinkSiblings> activeLinkSiblingsList, string pdfFolderPath)
+    static async Task HiddenHeaderAndFooter(IPage page)
+    {
+        // Set header and footer elements to null
+        await page.EvaluateFunctionAsync(@"() => {
+            var header = document.querySelector('header');
+            var pheader = document.querySelector('pheader');
+            var aside = document.querySelector('aside');
+            var docsNav = document.querySelector('.docs-nav');
+            var footer = document.querySelector('footer');
+            var cconsentBar = document.querySelector('#cconsent-bar');
+            var cconsentModal = document.querySelector('#cconsent-modal');
+            var feedback = document.querySelector(""[class^='feedback_inlineWrapper']"");
+            if (header) {
+                header.parentNode.removeChild(header);
+            }if (pheader) {
+                pheader.parentNode.removeChild(pheader);
+            }
+            if (aside) {
+                aside.parentNode.removeChild(aside);
+            } if (docsNav) {
+                docsNav.parentNode.removeChild(docsNav);
+            }
+            if (footer) {
+                footer.parentNode.removeChild(footer);
+            }
+            if (cconsentBar) {
+                cconsentBar.parentNode.removeChild(cconsentBar);
+            }
+            if (cconsentModal) {
+                cconsentModal.parentNode.removeChild(cconsentModal);
+            }
+            if (feedback) {
+                feedback.parentNode.removeChild(feedback);
+            }
+
+        }");
+    }
+
+    public static async Task SavePagesContent(List<ActiveLinkSiblings> activeLinkSiblingsList, string pdfFolderPath)
     {
         var browser = await Puppeteer.LaunchAsync(new LaunchOptions
         {
             ExecutablePath = @"C:\Program Files\Google\Chrome\Application\chrome.exe",
             Headless = true
         });
-        var pagesContentList = new List<PageContent>();
+
+        // Set up PDF options
+        var pdfOptions = new PdfOptions
+        {
+            Format = PaperFormat.A4,
+            MarginOptions = new MarginOptions
+            {
+                Top = "2cm",
+                Right = "1cm",
+                Bottom = "2cm",
+                Left = "1cm"
+            },
+            DisplayHeaderFooter = false,
+            PrintBackground = true
+        };
+
         var index = 0;
         foreach (var activeLinkSiblings in activeLinkSiblingsList)
         {
@@ -354,13 +277,11 @@ class Program
                     var content = await page.EvaluateExpressionAsync<string>(
                             "document.querySelector('.docs-body').outerHTML");
 
-                    pagesContentList.Add(new PageContent
-                    {
-                        Title = Text,
-                        Content = content
-                    });
+                    // Save PDF to the created folder
+                    var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{index}.pdf");
+                    // Save content to PDF
+                    await page.PdfAsync(pdfFilePath, pdfOptions);
 
-                    await SavePage(page, index, pdfFolderPath);
                     index++;
                 }
                 catch (Exception ex)
@@ -373,37 +294,9 @@ class Program
         }
 
         await browser.CloseAsync();
-        return pagesContentList;
+
     }
 
-    public static async Task SavePage(IPage page, int index, string pdfFolderPath)
-    {
-        // Set up PDF options
-        var pdfOptions = new PdfOptions
-        {
-            Format = PaperFormat.A4,
-            MarginOptions = new MarginOptions
-            {
-                Top = "2cm",
-                Right = "1cm",
-                Bottom = "2cm",
-                Left = "1cm"
-            },
-            DisplayHeaderFooter = false,
-            PrintBackground = true
-        };
-
-        // Save PDF to the created folder
-        var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{index}.pdf");
-        // Save content to PDF
-        await page.PdfAsync(pdfFilePath, pdfOptions);
-
-        // get pdfFiles
-        var pdfFiles = Directory.GetFiles(pdfFolderPath);
-        var sortedPdfFiles = pdfFiles.OrderBy(f => GetFileNumber(f)).ToList();
-        var finalFile = Path.Combine(pdfFolderPath, "openai-docs.pdf");
-        MergePdfFiles(sortedPdfFiles, finalFile);
-    }
 
     public static async Task SaveContentToPDF(List<PageContent> pagesContentList, string filePath)
     {
@@ -456,14 +349,14 @@ class Program
         return pdfFolderPath;
     }
 
-    static void saveAll(string pdfFolderPath)
+    static void SaveAllToPdf(string pdfFolderPath)
     {
         // get pdfFiles
         var pdfFiles = Directory.GetFiles(pdfFolderPath);
         var sortedPdfFiles = pdfFiles.OrderBy(f => GetFileNumber(f)).ToList();
         // 打印排序后的文件名
         sortedPdfFiles.ForEach(f => Console.WriteLine(f));
-        var finalFile = Path.Combine(pdfFolderPath, "nextjs-learn.pdf");
+        var finalFile = Path.Combine(pdfFolderPath, "openai-docs.pdf");
         MergePdfFiles(sortedPdfFiles, finalFile);
     }
 
