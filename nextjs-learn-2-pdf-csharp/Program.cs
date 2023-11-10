@@ -205,7 +205,7 @@ class Program
         // Set header and footer elements to null
         await page.EvaluateFunctionAsync(@"() => {
             var header = document.querySelector('header');
-            var pheader = document.querySelector('pheader');
+            var pheader = document.querySelector('.pheader');
             var aside = document.querySelector('aside');
             var docsNav = document.querySelector('.docs-nav');
             var footer = document.querySelector('footer');
