@@ -2,11 +2,7 @@
 using iText.Kernel.Utils;
 using PuppeteerSharp;
 using PuppeteerSharp.Media;
-using System.Linq;
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using System.Text.Json;
-using System;
 
 class Program
 {
@@ -15,8 +11,7 @@ class Program
         string pdfFolderPath = PrepareDirectory();
 
         List<NavLink> navLinks = await GetNavLinks();
-        var activeLinkSiblings = await GetActiveLinkSiblings(navLinks);
-        await SavePagesContent(activeLinkSiblings, pdfFolderPath);
+        await SavePagesContent(navLinks, pdfFolderPath);
         SaveAllToPdf(pdfFolderPath);
     }
 
@@ -49,7 +44,7 @@ class Program
         // Get the initial scroll height of the page
         var previousScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
         var totalHeight = 0;
-        var distance = 300;
+        var distance = 50;
         while (true)
         {
             // Scroll down by increasing the scrollTop property of the page's body
@@ -66,6 +61,7 @@ class Program
             Console.WriteLine($"newScrollHeight: {newScrollHeight}");
             if (newScrollHeight < totalHeight)
             {
+                await Task.Delay(1000);
                 // No new content has loaded, break out of the loop
                 break;
             }
@@ -125,15 +121,30 @@ class Program
         return navLinks;
     }
 
-    public static async Task<List<ActiveLinkSiblings>> GetActiveLinkSiblings(List<NavLink> navLinks)
+    public static async Task SavePagesContent(List<NavLink> navLinks, string pdfFolderPath)
     {
         var browser = await Puppeteer.LaunchAsync(new LaunchOptions
         {
             ExecutablePath = @"C:\Program Files\Google\Chrome\Application\chrome.exe",
             Headless = true
         });
-        var activeLinkSiblingsList = new List<ActiveLinkSiblings>();
 
+        // Set up PDF options
+        var pdfOptions = new PdfOptions
+        {
+            Format = PaperFormat.A4,
+            MarginOptions = new MarginOptions
+            {
+                Top = "2cm",
+                Right = "1cm",
+                Bottom = "2cm",
+                Left = "1cm"
+            },
+            DisplayHeaderFooter = false,
+            PrintBackground = true
+        };
+
+        var index = 0;
         foreach (var navLink in navLinks)
         {
             foreach (var (Text, Url) in navLink.Links)
@@ -141,42 +152,24 @@ class Program
                 var page = await browser.NewPageAsync();
                 await page.GoToAsync(Url);
 
-                var activeLink = await page.QuerySelectorAsync(".scroll-link.side-nav-item.active.active-exact");
-                if (activeLink != null)
+                try
                 {
-                    var activeTitle = await (await activeLink.GetPropertyAsync("textContent")).JsonValueAsync<string>();
-                    var activeLinkHref = await (await activeLink.GetPropertyAsync("href")).JsonValueAsync<string>();
-                    // here must declar Link[] type, else it will convert fail
-                    var siblingLinksElements = await activeLink.EvaluateFunctionAsync<Link[]>(@"(activeLink) => {
-                        const siblings = [];
-                        let sibling = activeLink.nextElementSibling;
-                        while (sibling) {
-                            if (sibling.matches('.scroll-link.side-nav-item.side-nav-child')) {
-                                let obj = { Text: sibling.textContent, Url: sibling.href };
-                                siblings.push(obj);
-                            }
-                            sibling = sibling.nextElementSibling;
-                        }
-                        return siblings;
-                    }", activeLink);
+                    Console.WriteLine($"fetching page: {Url}");
 
+                    await LoadAllPageContent(page);
 
-                    if (siblingLinksElements != null && siblingLinksElements.Length > 0)
-                    {
+                    await HideHeaderAndFooter(page);
 
-                        var siblingLinks = siblingLinksElements.Select(link => (link.Text, link.Url)).ToList();
-                        // add active link to the first position
-                        siblingLinks.Insert(0, (activeTitle, activeLinkHref));
-                        activeLinkSiblingsList.Add(new ActiveLinkSiblings
-                        {
-                            ActiveTitle = activeTitle,
-                            SiblingLinks = siblingLinks
-                        });
+                    // Save PDF to the created folder
+                    var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{index}.pdf");
+                    // Save content to PDF
+                    await page.PdfAsync(pdfFilePath, pdfOptions);
 
-                    }
-
-
-
+                    index++;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
                 }
 
                 await page.CloseAsync();
@@ -184,20 +177,6 @@ class Program
         }
 
         await browser.CloseAsync();
-
-        foreach (var navLink in activeLinkSiblingsList)
-        {
-            Console.WriteLine(navLink.ActiveTitle);
-            foreach (var (Text, Url) in navLink.SiblingLinks)
-            {
-                Console.WriteLine($"{Text} - {Url}");
-            }
-            Console.WriteLine();
-            Console.WriteLine("===================");
-            Console.WriteLine();
-        }
-
-        return activeLinkSiblingsList;
     }
 
     static async Task HideHeaderAndFooter(IPage page)
@@ -237,69 +216,6 @@ class Program
 
         }");
     }
-
-    public static async Task SavePagesContent(List<ActiveLinkSiblings> activeLinkSiblingsList, string pdfFolderPath)
-    {
-        var browser = await Puppeteer.LaunchAsync(new LaunchOptions
-        {
-            ExecutablePath = @"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            Headless = true
-        });
-
-        // Set up PDF options
-        var pdfOptions = new PdfOptions
-        {
-            Format = PaperFormat.A4,
-            MarginOptions = new MarginOptions
-            {
-                Top = "2cm",
-                Right = "1cm",
-                Bottom = "2cm",
-                Left = "1cm"
-            },
-            DisplayHeaderFooter = false,
-            PrintBackground = true
-        };
-
-        var index = 0;
-        foreach (var activeLinkSiblings in activeLinkSiblingsList)
-        {
-            foreach (var (Text, Url) in activeLinkSiblings.SiblingLinks)
-            {
-                var page = await browser.NewPageAsync();
-                await page.GoToAsync(Url);
-
-                try
-                {
-                    Console.WriteLine($"fetching page: {Url}");
-
-                    await LoadAllPageContent(page);
-
-                    await HideHeaderAndFooter(page);
-
-                    var content = await page.EvaluateExpressionAsync<string>(
-                            "document.querySelector('.docs-body').outerHTML");
-
-                    // Save PDF to the created folder
-                    var pdfFilePath = Path.Combine(pdfFolderPath, $"Article_{index}.pdf");
-                    // Save content to PDF
-                    await page.PdfAsync(pdfFilePath, pdfOptions);
-
-                    index++;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.ToString());
-                }
-
-                await page.CloseAsync();
-            }
-        }
-
-        await browser.CloseAsync();
-
-    }
-
 
     public static async Task SaveContentToPDF(List<PageContent> pagesContentList, string filePath)
     {
