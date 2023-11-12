@@ -44,7 +44,7 @@ class Program
         // Get the initial scroll height of the page
         var previousScrollHeight = await page.EvaluateExpressionAsync<int>("document.body.scrollHeight");
         var totalHeight = 0;
-        var distance = 50;
+        var distance = 150;
         while (true)
         {
             // Scroll down by increasing the scrollTop property of the page's body
@@ -61,11 +61,12 @@ class Program
             Console.WriteLine($"newScrollHeight: {newScrollHeight}");
             if (newScrollHeight < totalHeight)
             {
-                await Task.Delay(1000);
+                await page.EvaluateFunctionAsync(@"() => {
+                    window.scrollTo(0, 0);
+                }");
                 // No new content has loaded, break out of the loop
                 break;
             }
-
 
         }
     }
@@ -156,6 +157,9 @@ class Program
                 {
                     Console.WriteLine($"fetching page: {Url}");
 
+                    Console.WriteLine("Scrolling page first time");
+                    await LoadAllPageContent(page);
+                    Console.WriteLine("Scrolling page second time");
                     await LoadAllPageContent(page);
 
                     await HideHeaderAndFooter(page);
