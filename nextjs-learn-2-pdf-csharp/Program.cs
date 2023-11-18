@@ -81,14 +81,14 @@ class Program
         });
         var page = await browser.NewPageAsync();
 
-        await page.GoToAsync("https://platform.openai.com/docs/overview");
+        await page.GoToAsync("https://tldraw.dev/");
 
-        var sideNavSections = await page.QuerySelectorAllAsync(".docs-nav .side-nav .side-nav-section");
+        var sideNavSections = await page.QuerySelectorAllAsync(".sidebar");
         var navLinks = new List<NavLink>();
 
         foreach (var section in sideNavSections)
         {
-            var header = await section.QuerySelectorAsync(".side-nav-header.subheading");
+            var header = await section.QuerySelectorAsync(".sidebar__section__title");
             var title = await (await header.GetPropertyAsync("textContent")).JsonValueAsync<string>();
 
             var links = await section.QuerySelectorAllAsync("a");
@@ -157,10 +157,9 @@ class Program
                 {
                     Console.WriteLine($"fetching page: {Url}");
 
-                    Console.WriteLine("Scrolling page first time");
+                    Console.WriteLine("Scrolling page");
                     await LoadAllPageContent(page);
-                    Console.WriteLine("Scrolling page second time");
-                    await LoadAllPageContent(page);
+       
 
                     await HideHeaderAndFooter(page);
 
@@ -187,12 +186,12 @@ class Program
     {
         // Set header and footer elements to null
         await page.EvaluateFunctionAsync(@"() => {
-            var header = document.querySelector('header');
+            var header = document.querySelector('.layout__header');
             var pheader = document.querySelector('.pheader');
-            var aside = document.querySelector('aside');
-            var docsNav = document.querySelector('.docs-nav');
-            var footer = document.querySelector('footer');
-            var cconsentBar = document.querySelector('#cconsent-bar');
+            var aside = document.querySelector('.sidebar');
+            var docsNav = document.querySelector('.layout__headings');
+            var footer = document.querySelector('.footer');
+            var cconsentBar = document.querySelector('.menu__button');
             var cconsentModal = document.querySelector('#cconsent-modal');
             var feedback = document.querySelector(""[class^='feedback_inlineWrapper']"");
             if (header) {
@@ -279,7 +278,7 @@ class Program
         var sortedPdfFiles = pdfFiles.OrderBy(f => GetFileNumber(f)).ToList();
         // 打印排序后的文件名
         sortedPdfFiles.ForEach(f => Console.WriteLine(f));
-        var finalFile = Path.Combine(pdfFolderPath, "openai-docs.pdf");
+        var finalFile = Path.Combine(pdfFolderPath, "tldraw-docs.pdf");
         MergePdfFiles(sortedPdfFiles, finalFile);
     }
 
