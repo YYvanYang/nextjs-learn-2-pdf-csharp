@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Text.Json;
 using System;
+using static System.Collections.Specialized.BitVector32;
 
 class Program
 {
@@ -16,7 +17,7 @@ class Program
 
         List<NavLink> navLinks = await GetNavLinks();
         var activeLinkSiblings = await GetActiveLinkSiblings(navLinks);
-        var pagesContentList = await GetPagesContent(activeLinkSiblings, pdfFolderPath);
+        //var pagesContentList = await GetPagesContent(activeLinkSiblings, pdfFolderPath);
         // Define the path where you want to save the PDF
         //string pdfPath = Path.Combine(pdfFolderPath, "openai-document.pdf");
         //await SaveContentToPDF(pagesContentList, pdfPath);
@@ -153,7 +154,7 @@ class Program
     public struct NavLink
     {
         public string Title;
-        public List<(string Text, string Url)> Links;
+        public string Url;
     }
 
     public struct ActiveLinkSiblings
@@ -214,30 +215,24 @@ class Program
         });
         var page = await browser.NewPageAsync();
 
-        await page.GoToAsync("https://platform.openai.com/docs/overview");
+        await page.GoToAsync("https://learn.react-js.dev/");
 
-        var sideNavSections = await page.QuerySelectorAllAsync(".docs-nav .side-nav .side-nav-section");
+        var sideNavSections = await page.QuerySelectorAllAsync("nav a");
         var navLinks = new List<NavLink>();
 
         foreach (var section in sideNavSections)
         {
-            var header = await section.QuerySelectorAsync(".side-nav-header.subheading");
+            var header = await section.QuerySelectorAsync("div[dir='auto']");
             var title = await (await header.GetPropertyAsync("textContent")).JsonValueAsync<string>();
 
-            var links = await section.QuerySelectorAllAsync("a");
-            var linkData = new List<(string Text, string Url)>();
+            var link = section;
 
-            foreach (var link in links)
-            {
-                var text = await (await link.GetPropertyAsync("textContent")).JsonValueAsync<string>();
-                var url = await (await link.GetPropertyAsync("href")).JsonValueAsync<string>();
-                linkData.Add((text, url));
-            }
+            var url = await (await link.GetPropertyAsync("href")).JsonValueAsync<string>();
 
             navLinks.Add(new NavLink
             {
                 Title = title,
-                Links = linkData
+                Url = url
             });
         }
 
@@ -245,11 +240,7 @@ class Program
 
         foreach (var navLink in navLinks)
         {
-            Console.WriteLine(navLink.Title);
-            foreach (var (Text, Url) in navLink.Links)
-            {
-                Console.WriteLine($"{Text} - {Url}");
-            }
+            Console.WriteLine($"{navLink.Title} - {navLink.Url}");
         }
 
         return navLinks;
@@ -266,50 +257,64 @@ class Program
 
         foreach (var navLink in navLinks)
         {
-            foreach (var (Text, Url) in navLink.Links)
+            var Title = navLink.Title;
+            var Url = navLink.Url;
             {
-                var page = await browser.NewPageAsync();
-                await page.GoToAsync(Url);
-
-                var activeLink = await page.QuerySelectorAsync(".scroll-link.side-nav-item.active.active-exact");
-                if (activeLink != null)
+                try
                 {
-                    var activeTitle = await (await activeLink.GetPropertyAsync("textContent")).JsonValueAsync<string>();
-                    var activeLinkHref = await (await activeLink.GetPropertyAsync("href")).JsonValueAsync<string>();
-                    // here must declar Link[] type, else it will convert fail
-                    var siblingLinksElements = await activeLink.EvaluateFunctionAsync<Link[]>(@"(activeLink) => {
+
+                    var page = await browser.NewPageAsync();
+                    await page.GoToAsync(Url);
+
+                    //var activeLink = await page.QuerySelectorAsync(".scroll-link.side-nav-item.active.active-exact");
+
+                    var _url = Url.Replace("https://learn.react-js.dev", "");
+
+                    var activeLink = await page.QuerySelectorAsync($"a[href='{_url}']");
+                    if (activeLink != null)
+                    {
+                        var activeTitle = await (await activeLink.GetPropertyAsync("textContent")).JsonValueAsync<string>();
+                        var activeLinkHref = await (await activeLink.GetPropertyAsync("href")).JsonValueAsync<string>();
+
+                        Console.WriteLine($"get sublinks of {activeTitle} {activeLinkHref}");   
+                        // here must declar Link[] type, else it will convert fail
+                        var siblingLinks = await activeLink.EvaluateFunctionAsync<string[]>(@"(activeLink) => {
                         const siblings = [];
                         let sibling = activeLink.nextElementSibling;
-                        while (sibling) {
-                            if (sibling.matches('.scroll-link.side-nav-item.side-nav-child')) {
-                                let obj = { Text: sibling.textContent, Url: sibling.href };
-                                siblings.push(obj);
+                        if (sibling) {
+                            let subLinks = sibling.querySelectorAll('a');
+                            for (let l of subLinks) {
+                                siblings.push(l.href);
                             }
-                            sibling = sibling.nextElementSibling;
                         }
                         return siblings;
                     }", activeLink);
 
+                        var links = new List<ActiveLinkSiblings>();
 
-                    if (siblingLinksElements != null && siblingLinksElements.Length > 0)
-                    {
-
-                        var siblingLinks = siblingLinksElements.Select(link => (link.Text, link.Url)).ToList();
-                        // add active link to the first position
-                        siblingLinks.Insert(0, (activeTitle, activeLinkHref));
-                        activeLinkSiblingsList.Add(new ActiveLinkSiblings
+                        if (siblingLinks != null && siblingLinks.Length > 0)
                         {
-                            ActiveTitle = activeTitle,
-                            SiblingLinks = siblingLinks
-                        });
+                            var _siblingLinks = siblingLinks.Select(link => (link, link)).ToList();
+                            // add active link to the first position
+                            _siblingLinks.Insert(0, (activeTitle, activeLinkHref));
+                            activeLinkSiblingsList.Add(new ActiveLinkSiblings
+                            {
+                                ActiveTitle = activeTitle,
+                                SiblingLinks = _siblingLinks
+                            });
+
+                        }
+
+
 
                     }
 
-
+                    await page.CloseAsync();
+                }
+                catch (Exception)
+                {
 
                 }
-
-                await page.CloseAsync();
             }
         }
 
